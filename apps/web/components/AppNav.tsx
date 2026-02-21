@@ -26,7 +26,7 @@ export default function AppNav() {
     items.findIndex((it) => isActive(pathname, it.href))
   );
 
-  // Layout constants (must match classes below)
+
   const itemW = 104; // px (w-[104px])
   const itemH = 36;  // px (h-9)
   const gap = 8;     // px (gap-2)
