@@ -17,6 +17,17 @@ type Msg = {
   ts: number;
 };
 
+type BackendChatResponse = {
+  answer: string;
+  sources?: Array<{
+    doc_id?: string;
+    title?: string;
+    doc?: string;
+    snippet?: string;
+  }>;
+};
+
+const API = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 const LS_CHAT = "taxpilot_chat_v1";
 
 function Pill({ children }: { children: React.ReactNode }) {
@@ -47,11 +58,7 @@ function saveMsgs(msgs: Msg[]) {
   localStorage.setItem(LS_CHAT, JSON.stringify(msgs));
 }
 
-function Bubble({
-  msg,
-}: {
-  msg: Msg;
-}) {
+function Bubble({ msg }: { msg: Msg }) {
   const isUser = msg.role === "user";
 
   return (
@@ -72,7 +79,7 @@ function Bubble({
           <div className="mt-3 rounded-2xl border border-white/10 bg-black/20 p-3">
             <div className="flex items-center justify-between">
               <div className="text-xs font-semibold text-white/70">
-                Sources used (mock)
+                Sources used
               </div>
               <Pill>{msg.sources.length}</Pill>
             </div>
@@ -101,50 +108,14 @@ function Bubble({
   );
 }
 
-async function fakeRagAnswer(q: string): Promise<{ answer: string; sources: Source[] }> {
-  // quick heuristic mock (replace with real API later)
-  const lower = q.toLowerCase();
-
-  if (lower.includes("student loan") || lower.includes("1098-e")) {
-    return {
-      answer:
-        "Based on the detected 1098-E, you *may* be eligible to deduct student loan interest depending on your MAGI and filing status. To confirm, TaxPilot needs the 1098-E amount and your income thresholds.\n\nThis is educational, not tax advice.",
-      sources: [
-        { doc: "1098-E (Student Loan Interest)", snippet: "Interest paid may be deductible subject to income limits." },
-        { doc: "W-2 (Wages)", snippet: "Income used to assess eligibility thresholds." },
-      ],
-    };
-  }
-
-  if (lower.includes("education") || lower.includes("1098-t") || lower.includes("aotc") || lower.includes("llc")) {
-    return {
-      answer:
-        "You might qualify for an education credit (AOTC/LLC) if you have qualified tuition expenses. TaxPilot would confirm enrollment/tuition via 1098-T and related receipts.\n\nThis is educational, not tax advice.",
-      sources: [
-        { doc: "1098-T (Tuition Statement)", snippet: "Tuition/fees used to evaluate education credits." },
-        { doc: "Receipts (Qualified expenses)", snippet: "Books/supplies may count depending on the credit and rules." },
-      ],
-    };
-  }
-
-  if (lower.includes("itemize") || lower.includes("standard deduction")) {
-    return {
-      answer:
-        "A quick check: if your potential itemized deductions (mortgage interest, charitable donations, certain medical expenses, state/local taxes) exceed the standard deduction, itemizing *may* help. TaxPilot can help you organize those totals.\n\nThis is educational, not tax advice.",
-      sources: [
-        { doc: "Charity Receipts", snippet: "Sum of eligible charitable contributions." },
-        { doc: "1098 (Mortgage Interest)", snippet: "Mortgage interest may be deductible if you itemize." },
-      ],
-    };
-  }
-
-  return {
-    answer:
-      "I can help organize what you have and what’s missing. If you upload your W-2/1099/1098/1040, I’ll generate a snapshot and explain flags grounded in your docs.\n\nTry asking: “What docs am I missing?” or “What opportunities should I review?”",
-    sources: [
-      { doc: "Uploaded documents (demo)", snippet: "TaxPilot grounds answers in your provided files." },
-    ],
-  };
+function toSources(raw?: BackendChatResponse["sources"]): Source[] {
+  if (!raw || !Array.isArray(raw)) return [];
+  return raw
+    .map((s) => ({
+      doc: s.title ?? s.doc ?? s.doc_id ?? "Document",
+      snippet: s.snippet ?? "",
+    }))
+    .filter((s) => s.doc && s.snippet);
 }
 
 export default function ChatPage() {
@@ -154,6 +125,12 @@ export default function ChatPage() {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
+  const [activeReturn, setActiveReturn] = useState<
+    "auto" | "1040_2025" | "w2_2025" | "1098e_2025"
+  >("auto");
+  const [apiStatus, setApiStatus] = useState<"unknown" | "ok" | "down">(
+    "unknown"
+  );
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
@@ -168,11 +145,20 @@ export default function ChatPage() {
   }, [msgs]);
 
   useEffect(() => {
-    // If user clicked a preset question (from dashboard quick ask)
-    if (presetQ) {
-      setInput(presetQ);
-    }
+    if (presetQ) setInput(presetQ);
   }, [presetQ]);
+
+  useEffect(() => {
+    // lightweight health check
+    (async () => {
+      try {
+        const r = await fetch(`${API}/health`, { method: "GET" });
+        setApiStatus(r.ok ? "ok" : "down");
+      } catch {
+        setApiStatus("down");
+      }
+    })();
+  }, []);
 
   const suggestions = useMemo(
     () => [
@@ -199,7 +185,6 @@ export default function ChatPage() {
     setInput("");
     setThinking(true);
 
-    // “typing” placeholder
     const placeholderId = genId();
     setMsgs((prev) => [
       ...prev,
@@ -212,28 +197,48 @@ export default function ChatPage() {
     ]);
 
     try {
-      // Replace this call with real backend later:
-      const res = await fakeRagAnswer(trimmed);
+      const active_doc_ids =
+        activeReturn === "auto" ? [] : [activeReturn as string];
+
+      const res = await fetch(`${API}/v1/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: trimmed,
+          active_doc_ids,
+        }),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || `HTTP ${res.status}`);
+      }
+
+      const data = (await res.json()) as BackendChatResponse;
 
       setMsgs((prev) =>
         prev.map((m) =>
           m.id === placeholderId
             ? {
                 ...m,
-                content: res.answer,
-                sources: res.sources,
+                content: data.answer || "No response.",
+                sources: toSources(data.sources),
                 ts: Date.now(),
               }
             : m
         )
       );
+
+      setApiStatus("ok");
     } catch (e: any) {
+      setApiStatus("down");
       setMsgs((prev) =>
         prev.map((m) =>
           m.id === placeholderId
             ? {
                 ...m,
-                content: "Something went wrong. Please try again.",
+                content:
+                  "Backend chat is not reachable right now.\n\nMake sure Flask is running on http://localhost:8000 and your GEMINI_API_KEY is set.\n\nEducational only, not tax advice.",
                 ts: Date.now(),
               }
             : m
@@ -261,20 +266,30 @@ export default function ChatPage() {
             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-white/70">
               TaxPilot Chat
               <span className="h-1 w-1 rounded-full bg-white/40" />
-              Grounded answers (mock)
+              Gemini via Flask
             </div>
+
             <h1 className="mt-4 text-4xl font-semibold tracking-tight">
               Ask TaxPilot
             </h1>
+
             <p className="mt-3 text-white/70 max-w-2xl">
               Ask questions about deductions, missing documents, and next steps.
-              Answers will be grounded in your uploaded docs once backend is connected.
+              TaxPilot will ground answers in the selected return/documents.
             </p>
 
             <div className="mt-5 flex flex-wrap gap-2">
-              <Pill>RAG-style answers</Pill>
-              <Pill>No tax advice</Pill>
+              <Pill>Grounded responses</Pill>
+              <Pill>Educational only</Pill>
               <Pill>Demo Mode</Pill>
+              <Pill>
+                API:{" "}
+                {apiStatus === "ok"
+                  ? "Online"
+                  : apiStatus === "down"
+                  ? "Offline"
+                  : "Checking…"}
+              </Pill>
             </div>
           </div>
 
@@ -295,18 +310,40 @@ export default function ChatPage() {
         </div>
       </section>
 
-      {/* Suggestions */}
-      <div className="flex flex-wrap gap-2">
-        {suggestions.map((s) => (
-          <button
-            key={s}
-            onClick={() => send(s)}
-            className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 hover:bg-white/10 hover:text-white transition"
-            disabled={thinking}
+      {/* Context selector + Suggestions */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-center gap-2">
+          <div className="text-xs text-white/60">Active context</div>
+          <select
+            value={activeReturn}
+            onChange={(e) =>
+              setActiveReturn(e.target.value as typeof activeReturn)
+            }
+            className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white/80 outline-none focus:ring-2 focus:ring-emerald-400/60"
           >
-            {s}
-          </button>
-        ))}
+            <option value="auto">Auto (no doc selected)</option>
+            <option value="1040_2025">1040 • 2025 Return</option>
+            <option value="w2_2025">W-2 • 2025</option>
+            <option value="1098e_2025">1098-E • 2025</option>
+          </select>
+
+          <div className="hidden md:block text-xs text-white/50">
+            (Backend uses this to ground Gemini.)
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {suggestions.map((s) => (
+            <button
+              key={s}
+              onClick={() => send(s)}
+              className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 hover:bg-white/10 hover:text-white transition"
+              disabled={thinking}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Chat window */}
@@ -322,7 +359,8 @@ export default function ChatPage() {
         <div className="px-5 py-5 space-y-4 max-h-[520px] overflow-auto">
           {msgs.length === 0 ? (
             <div className="rounded-2xl border border-white/10 bg-black/20 p-6 text-sm text-white/70">
-              No messages yet. Try one of the suggestions above — or ask your own question.
+              No messages yet. Pick a context (optional) and ask a question — or
+              click a suggestion.
             </div>
           ) : (
             msgs.map((m) => <Bubble key={m.id} msg={m} />)
@@ -356,7 +394,8 @@ export default function ChatPage() {
           </form>
 
           <div className="mt-2 text-xs text-white/50">
-            Tip: Just Try
+            Backend endpoint:{" "}
+            <span className="text-white/70 font-mono">{API}/v1/chat</span>
           </div>
         </div>
       </section>
