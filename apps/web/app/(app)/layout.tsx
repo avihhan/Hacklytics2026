@@ -1,21 +1,25 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { isAuthed } from "@/lib/auth";
+import Stepper from "@/components/Stepper";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const authed = isAuthed();
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (!authed) {
+    const ok = isAuthed();
+    if (!ok) {
       router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+      return;
     }
-  }, [authed, router, pathname]);
+    setReady(true);
+  }, [router, pathname]);
 
-  if (!authed) {
+  if (!ready) {
     return (
       <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/70">
         Checking session…
@@ -23,5 +27,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return <>{children}</>;
+  return (
+    <div className="space-y-6">
+      <Stepper />
+      {children}
+    </div>
+  );
 }
