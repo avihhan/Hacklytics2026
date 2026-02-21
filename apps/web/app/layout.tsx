@@ -1,6 +1,7 @@
 import "./globals.css";
 import Link from "next/link";
 import AppNav from "@/components/AppNav";
+import TaxPilotIcon from "@/components/TaxPilotIcon";
 
 export const metadata = {
   title: "TaxPilot",
@@ -20,7 +21,7 @@ export default function RootLayout({
           <div className="mx-auto max-w-6xl px-4 py-4 flex items-center justify-between">
             {/* Logo / Brand */}
             <Link href="/" className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-2xl bg-emerald-400 shadow-[0_0_24px_rgba(52,211,153,0.55)]" />
+              <TaxPilotIcon className="h-9 w-9" />
               <div className="leading-tight">
                 <div className="font-semibold tracking-tight">
                   TaxPilot
