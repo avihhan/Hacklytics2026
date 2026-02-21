@@ -17,7 +17,7 @@ export async function uploadTaxDoc(file: File) {
   return handle(res);
 }
 
-export async function generateReport(payload: any) {
+export async function generateReport(payload: unknown) {
   const res = await fetch(`${API}/v1/report`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -27,7 +27,7 @@ export async function generateReport(payload: any) {
   return handle(res);
 }
 
-export async function chatAsk(payload: any) {
+export async function chatAsk(payload: unknown) {
   const res = await fetch(`${API}/v1/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
