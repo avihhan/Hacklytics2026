@@ -1,6 +1,7 @@
 import "./globals.css";
 import Link from "next/link";
 import NavAutoHide from "@/components/NavAutoHide";
+import TaxPilotIcon from "@/components/TaxPilotIcon";
 
 export const metadata = {
   title: "TaxPilot",
@@ -17,8 +18,21 @@ export default function RootLayout({
       <body className="min-h-screen bg-slate-950 text-slate-50">
         <header className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/70 backdrop-blur">
           <div className="mx-auto max-w-6xl px-4 py-4 flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-2xl bg-emerald-400 shadow-[0_0_24px_rgba(52,211,153,0.55)]" />
+            <Link href="/" className="flex items-center gap-3 group">
+              {/* Futuristic / Hackathon Flashy Icon */}
+              <div className="relative flex h-12 w-12 items-center justify-center">
+                {/* Radar pulse ring */}
+                <div className="absolute h-12 w-12 rounded-full bg-emerald-400/20 animate-ping" />
+
+                {/* Soft glow base */}
+                <div className="absolute h-12 w-12 rounded-full bg-emerald-400/10 blur-xl" />
+
+                {/* Icon container */}
+                <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-black/40 backdrop-blur-md shadow-[0_0_40px_rgba(52,211,153,0.35)] transition duration-300 group-hover:shadow-[0_0_60px_rgba(52,211,153,0.6)]">
+                  <TaxPilotIcon className="h-7 w-7" />
+                </div>
+              </div>
+
               <div className="leading-tight">
                 <div className="font-semibold tracking-tight">TaxPilot</div>
                 <div className="text-xs text-white/60">
@@ -27,7 +41,6 @@ export default function RootLayout({
               </div>
             </Link>
 
-            {/* Auto-hide nav on /login and /signup */}
             <NavAutoHide />
           </div>
         </header>
