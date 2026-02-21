@@ -130,7 +130,7 @@ export default function CallPage() {
 
             <p className="mt-3 max-w-2xl text-white/70">
               Get a spoken walkthrough of your filing readiness report and ask
-              quick questions. (We’ll connect Twilio + ElevenLabs later.)
+              quick questions. (Demo)
             </p>
 
             <div className="mt-5 flex flex-wrap gap-2">
@@ -175,7 +175,7 @@ export default function CallPage() {
                 className="mt-1 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-emerald-400/60"
               />
               <div className="mt-2 text-xs text-white/50">
-                Demo-only right now. We won’t actually place calls until Twilio is wired.
+                Demo-only right now. 
               </div>
             </div>
 
@@ -279,7 +279,7 @@ export default function CallPage() {
           <div>
             <div className="text-sm font-semibold">Next step</div>
             <div className="mt-1 text-sm text-white/70">
-              Once backend is ready, this button will trigger a real Twilio call + ElevenLabs voice.
+              The best is yet to come
             </div>
           </div>
 

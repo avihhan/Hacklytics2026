@@ -356,7 +356,7 @@ export default function ChatPage() {
           </form>
 
           <div className="mt-2 text-xs text-white/50">
-            Tip: Once backend is live, responses will include citations to the exact uploaded documents.
+            Tip: Just Try
           </div>
         </div>
       </section>
