@@ -169,7 +169,7 @@ export default function DashboardPage() {
             </h1>
 
             <p className="mt-3 text-white/70">
-              Upload documents, extract key fields, and review opportunity flags. Then ask questions grounded in your docs.
+              Upload your documents, extract key fields, and review opportunity flags. Then ask questions grounded in your docs.
             </p>
 
             <div className="mt-6 flex flex-wrap gap-3">
