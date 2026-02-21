@@ -2,7 +2,7 @@ import "./globals.css";
 import Link from "next/link";
 
 export const metadata = {
-  title: "RefundRadar",
+  title: "TaxPilot",
   description: "AI-powered tax filing assistant (educational, not tax advice).",
 };
 
