@@ -6,13 +6,15 @@ import { usePathname } from "next/navigation";
 type Step = {
   href: string;
   label: string;
+  hint: string;
 };
 
 const steps: Step[] = [
-  { href: "/upload", label: "Upload" },
-  { href: "/report", label: "Report" },
-  { href: "/chat", label: "Chat" },
-  { href: "/call", label: "Call" },
+  { href: "/dashboard", label: "Dashboard", hint: "Start" },
+  { href: "/upload", label: "Upload", hint: "Docs" },
+  { href: "/report", label: "Report", hint: "Flags" },
+  { href: "/chat", label: "Chat", hint: "Q&A" },
+  { href: "/call", label: "Call", hint: "Agent" },
 ];
 
 function isOnStep(pathname: string, href: string) {
@@ -22,21 +24,23 @@ function isOnStep(pathname: string, href: string) {
 export default function Stepper() {
   const pathname = usePathname();
 
-  // Show stepper only on these flow pages (not on /dashboard)
-  const activeIndex = steps.findIndex((s) => isOnStep(pathname, s.href));
-  if (activeIndex === -1) return null;
+  const activeIndexRaw = steps.findIndex((s) => isOnStep(pathname, s.href));
+  const activeIndex = activeIndexRaw === -1 ? 0 : activeIndexRaw;
 
-  const pct = steps.length === 1 ? 0 : (activeIndex / (steps.length - 1)) * 100;
+  const totalSteps = steps.length - 1; // exclude dashboard from count
+  const displayStep =
+    activeIndex === 0 ? "Start" : `Step ${activeIndex} of ${totalSteps}`;
+
+  const pct =
+    steps.length <= 1
+      ? 0
+      : (activeIndex / (steps.length - 1)) * 100;
 
   return (
     <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
       <div className="flex items-center justify-between gap-3">
-        <div className="text-xs font-semibold text-white/70">
-          Flow
-        </div>
-        <div className="text-xs text-white/50">
-          Step {activeIndex + 1} of {steps.length}
-        </div>
+        <div className="text-xs font-semibold text-white/70">Flow</div>
+        <div className="text-xs text-white/50">{displayStep}</div>
       </div>
 
       {/* Progress bar */}
@@ -48,7 +52,7 @@ export default function Stepper() {
       </div>
 
       {/* Steps */}
-      <div className="mt-4 grid grid-cols-4 gap-2">
+      <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-5">
         {steps.map((s, i) => {
           const active = i === activeIndex;
           const done = i < activeIndex;
@@ -75,7 +79,7 @@ export default function Stepper() {
                       : "bg-white/5 text-white/70",
                   ].join(" ")}
                 >
-                  {done ? "✓" : i + 1}
+                  {done ? "✓" : i}
                 </div>
 
                 <div className="min-w-0">
@@ -88,7 +92,7 @@ export default function Stepper() {
                     {s.label}
                   </div>
                   <div className="text-xs text-white/50">
-                    {done ? "Done" : active ? "Current" : "Next"}
+                    {i === 0 ? "Start here" : done ? "Done" : active ? "Current" : "Next"}
                   </div>
                 </div>
               </div>
