@@ -7,7 +7,7 @@ import { loginDummy } from "@/lib/auth";
 export default function Login() {
   const router = useRouter();
   const sp = useSearchParams();
-  const next = sp.get("next") ?? "/report";
+  const next = sp.get("next") ?? "/dashboard";
   const signupHref = `/signup?next=${encodeURIComponent(next)}`;
 
   return (
