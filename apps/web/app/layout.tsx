@@ -6,14 +6,16 @@ export const metadata = {
   description: "AI-powered tax filing assistant (educational, not tax advice).",
 };
 
-const NavItem = ({ href, label }: { href: string; label: string }) => (
-  <Link
-    href={href}
-    className="text-sm text-zinc-700 hover:text-zinc-900 transition"
-  >
-    {label}
-  </Link>
-);
+function NavLink({ href, label }: { href: string; label: string }) {
+  return (
+    <Link
+      href={href}
+      className="text-sm font-medium text-white/80 hover:text-white transition"
+    >
+      {label}
+    </Link>
+  );
+}
 
 export default function RootLayout({
   children,
@@ -22,32 +24,32 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-zinc-50 text-zinc-900">
-        <header className="sticky top-0 z-10 border-b bg-white/80 backdrop-blur">
-          <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-xl bg-zinc-900" />
+      <body className="min-h-screen bg-slate-950 text-slate-50">
+        <header className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/70 backdrop-blur">
+          <div className="mx-auto max-w-6xl px-4 py-4 flex items-center justify-between">
+            <Link href="/" className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-2xl bg-emerald-400 shadow-[0_0_24px_rgba(52,211,153,0.55)]" />
               <div className="leading-tight">
-                <div className="font-semibold">RefundRadar</div>
-                <div className="text-xs text-zinc-500">Not tax advice</div>
+                <div className="font-semibold tracking-tight">RefundRadar</div>
+                <div className="text-xs text-white/60">Educational • Not tax advice</div>
               </div>
             </Link>
 
             <nav className="flex items-center gap-4">
-              <NavItem href="/upload" label="Upload" />
-              <NavItem href="/report" label="Report" />
-              <NavItem href="/chat" label="Chat" />
-              <NavItem href="/call" label="Call Agent" />
+              <NavLink href="/dashboard" label="Dashboard" />
+              <NavLink href="/upload" label="Upload" />
+              <NavLink href="/report" label="Report" />
+              <NavLink href="/chat" label="Chat" />
+              <NavLink href="/call" label="Call" />
             </nav>
           </div>
         </header>
 
-        <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
+        <main className="mx-auto max-w-6xl px-4 py-10">{children}</main>
 
-        <footer className="border-t bg-white">
-          <div className="mx-auto max-w-6xl px-4 py-6 text-xs text-zinc-500">
-            TaxPilot is an educational tool to organize documents and surface
-            potential opportunities. It does not provide tax advice.
+        <footer className="border-t border-white/10">
+          <div className="mx-auto max-w-6xl px-4 py-6 text-xs text-white/60">
+            TaxPilot organizes documents and highlights potential opportunities. It does not provide tax advice.
           </div>
         </footer>
       </body>
