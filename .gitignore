@@ -1,6 +1,78 @@
+# Dependencies
 node_modules/
-.env
+.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
 venv/
-__pycache__/
+.venv/
+env/
+ENV/
+
+# Next.js
 .next/
+out/
+
+# Production/Build
 dist/
+build/
+*.tsbuildinfo
+next-env.d.ts
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+flask_log.txt
+
+# OS/System
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+.project
+.settings/
+.classpath
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.tox/
+.coverage
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.pip
+
+# Environment / Secrets
+.env
+.env.*
+!.env.example
+hacklytics-488122-b3116d9985fa.json
+federal tax - *.pdf
+f1040_*.pdf
+
+# Project Specific
+.agents/
+apps/api/uploads/
+test_*.py
+reset_actian.py
+flask_log.txt

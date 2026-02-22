@@ -2,17 +2,17 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { uploadTaxDoc, listDocs, deleteDoc } from "@/lib/api";
 
 type UploadedDoc = {
-  id: string;
-  name: string;
+  doc_id: string;
+  original_name: string;
+  stored_name: string;
   size: number;
   type: string;
-  uploadedAt: number;
-  status: "Ready" | "Queued" | "Failed";
+  uploaded_at: number;
+  status: "Ready" | "Uploading" | "Failed";
 };
-
-const LS_KEY = "taxpilot_docs_v1";
 
 function Pill({ children }: { children: React.ReactNode }) {
   return (
@@ -57,64 +57,60 @@ function formatBytes(bytes: number) {
   return `${mb.toFixed(1)} MB`;
 }
 
-function genId() {
-  return `doc_${Math.random().toString(16).slice(2)}_${Date.now()}`;
-}
-
-function loadDocs(): UploadedDoc[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as UploadedDoc[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveDocs(docs: UploadedDoc[]) {
-  localStorage.setItem(LS_KEY, JSON.stringify(docs));
-}
-
 export default function UploadPage() {
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const [docs, setDocs] = useState<UploadedDoc[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [toast, setToast] = useState<string>("");
+  const [uploading, setUploading] = useState(false);
 
+  // Load docs from API on mount
   useEffect(() => {
-    setDocs(loadDocs());
+    listDocs()
+      .then((data) => {
+        const mapped = (data as UploadedDoc[]).map((d) => ({
+          ...d,
+          status: "Ready" as const,
+        }));
+        setDocs(mapped);
+      })
+      .catch(() => {
+        /* API offline — start empty */
+      });
   }, []);
 
   const stats = useMemo(() => {
     const total = docs.length;
     const ready = docs.filter((d) => d.status === "Ready").length;
-    const newest = docs[0]?.uploadedAt;
+    const newest = docs[0]?.uploaded_at;
     return { total, ready, newest };
   }, [docs]);
 
-  function addFiles(files: FileList | File[]) {
+  async function addFiles(files: FileList | File[]) {
     const arr = Array.from(files);
     if (arr.length === 0) return;
 
-    const next: UploadedDoc[] = arr.map((f) => ({
-      id: genId(),
-      name: f.name,
-      size: f.size,
-      type: f.type || "application/octet-stream",
-      uploadedAt: Date.now(),
-      status: "Ready",
-    }));
+    setUploading(true);
+    let successCount = 0;
 
-    // newest first
-    const merged = [...next, ...docs];
-    setDocs(merged);
-    saveDocs(merged);
+    for (const file of arr) {
+      try {
+        const result = (await uploadTaxDoc(file)) as UploadedDoc;
+        result.status = "Ready";
+        setDocs((prev) => [result, ...prev]);
+        successCount++;
+      } catch (err) {
+        console.error("Upload failed:", err);
+      }
+    }
 
-    setToast(`${next.length} file${next.length > 1 ? "s" : ""} added ✅`);
-    window.setTimeout(() => setToast(""), 1800);
+    setUploading(false);
+
+    if (successCount > 0) {
+      setToast(`${successCount} file${successCount > 1 ? "s" : ""} uploaded ✅`);
+      window.setTimeout(() => setToast(""), 1800);
+    }
   }
 
   function onDrop(e: React.DragEvent) {
@@ -126,15 +122,24 @@ export default function UploadPage() {
     }
   }
 
-  function removeDoc(id: string) {
-    const filtered = docs.filter((d) => d.id !== id);
-    setDocs(filtered);
-    saveDocs(filtered);
+  async function removeDoc(docId: string) {
+    try {
+      await deleteDoc(docId);
+    } catch {
+      /* still remove from UI even if API call fails */
+    }
+    setDocs((prev) => prev.filter((d) => d.doc_id !== docId));
   }
 
-  function clearAll() {
+  async function clearAll() {
+    for (const d of docs) {
+      try {
+        await deleteDoc(d.doc_id);
+      } catch {
+        /* ignore */
+      }
+    }
     setDocs([]);
-    saveDocs([]);
     setToast("Cleared uploads");
     window.setTimeout(() => setToast(""), 1200);
   }
@@ -154,7 +159,7 @@ export default function UploadPage() {
             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-white/70">
               TaxPilot • Upload Center
               <span className="h-1 w-1 rounded-full bg-white/40" />
-              Demo Mode
+              API Connected
             </div>
             <h1 className="mt-4 text-4xl font-semibold tracking-tight">
               Upload your tax documents
@@ -173,9 +178,10 @@ export default function UploadPage() {
           <div className="flex gap-3">
             <button
               onClick={() => inputRef.current?.click()}
-              className="rounded-xl bg-emerald-400 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-300 transition"
+              disabled={uploading}
+              className="rounded-xl bg-emerald-400 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-300 transition disabled:opacity-50"
             >
-              Choose files
+              {uploading ? "Uploading…" : "Choose files"}
             </button>
             <Link
               href="/report"
@@ -191,7 +197,7 @@ export default function UploadPage() {
       <section className="grid gap-4 md:grid-cols-3">
         <Section
           title="Dropzone"
-          subtitle="Drag and drop files here (stored locally for demo)."
+          subtitle="Drag and drop files here — stored on the server."
           right={
             <div className="flex gap-2">
               <button
@@ -242,7 +248,11 @@ export default function UploadPage() {
             </div>
 
             <div className="mt-4 text-sm font-semibold">
-              {dragOver ? "Drop to add files" : "Drag & drop your documents"}
+              {uploading
+                ? "Uploading…"
+                : dragOver
+                  ? "Drop to add files"
+                  : "Drag & drop your documents"}
             </div>
             <div className="mt-1 text-sm text-white/70">
               or click to browse
@@ -262,7 +272,7 @@ export default function UploadPage() {
           </div>
         </Section>
 
-        <Section title="Readiness" subtitle="Progress based on uploaded docs (mock).">
+        <Section title="Readiness" subtitle="Progress based on uploaded docs.">
           <div className="space-y-4">
             <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
               <div className="flex items-center justify-between">
@@ -282,7 +292,7 @@ export default function UploadPage() {
 
             <div className="flex flex-wrap gap-2">
               <Pill>Ready: {stats.ready}</Pill>
-              <Pill>Queued: {docs.filter((d) => d.status === "Queued").length}</Pill>
+              <Pill>Uploading: {docs.filter((d) => d.status === "Uploading").length}</Pill>
               <Pill>Failed: {docs.filter((d) => d.status === "Failed").length}</Pill>
             </div>
 
@@ -290,7 +300,7 @@ export default function UploadPage() {
               href="/report"
               className="block text-center rounded-xl bg-emerald-400 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-300 transition"
             >
-              Generate report (demo)
+              Generate report
             </Link>
           </div>
         </Section>
@@ -313,7 +323,7 @@ export default function UploadPage() {
       {/* Recent uploads */}
       <Section
         title="Recent uploads"
-        subtitle="These are stored locally for now. Backend will replace this list."
+        subtitle="Stored on the backend. Synced across sessions."
         right={
           <div className="flex items-center gap-2">
             <Pill>{docs.length} total</Pill>
@@ -328,24 +338,24 @@ export default function UploadPage() {
           <div className="space-y-3">
             {docs.slice(0, 8).map((d) => (
               <div
-                key={d.id}
+                key={d.doc_id}
                 className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-black/20 p-4 md:flex-row md:items-center md:justify-between"
               >
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <div className="truncate text-sm font-semibold">{d.name}</div>
+                    <div className="truncate text-sm font-semibold">{d.original_name}</div>
                     <Pill>{d.status}</Pill>
                     <Pill>{formatBytes(d.size)}</Pill>
                     <Pill>{d.type.includes("pdf") ? "PDF" : "Image"}</Pill>
                   </div>
                   <div className="mt-1 text-xs text-white/60">
-                    Added {new Date(d.uploadedAt).toLocaleString()}
+                    Added {new Date(d.uploaded_at).toLocaleString()}
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => removeDoc(d.id)}
+                    onClick={() => removeDoc(d.doc_id)}
                     className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10 transition"
                   >
                     Remove

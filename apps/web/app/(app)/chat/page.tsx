@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 type Source = {
   doc: string;
@@ -71,8 +73,57 @@ function Bubble({ msg }: { msg: Msg }) {
             : "border-white/10 bg-white/5",
         ].join(" ")}
       >
-        <div className="whitespace-pre-wrap text-sm leading-relaxed text-white">
-          {msg.content}
+        <div className="text-sm leading-relaxed text-white prose prose-invert prose-emerald max-w-none">
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+              ul: ({ children }) => <ul className="list-disc pl-4 mb-2">{children}</ul>,
+              ol: ({ children }) => <ol className="list-decimal pl-4 mb-2">{children}</ol>,
+              li: ({ children }) => <li className="mb-1">{children}</li>,
+              strong: ({ children }) => <strong className="font-bold text-emerald-400">{children}</strong>,
+              a: ({ children, href }) => (
+                <a href={href} target="_blank" rel="noopener noreferrer" className="text-emerald-400 underline underline-offset-2">
+                  {children}
+                </a>
+              ),
+              code: ({ children }) => (
+                <code className="bg-black/40 px-1.5 py-0.5 rounded font-mono text-xs text-emerald-300">
+                  {children}
+                </code>
+              ),
+              pre: ({ children }) => (
+                <pre className="bg-black/40 p-3 rounded-xl font-mono text-xs my-2 overflow-auto text-emerald-100 border border-white/5">
+                  {children}
+                </pre>
+              ),
+              blockquote: ({ children }) => (
+                <blockquote className="border-l-2 border-emerald-400/50 pl-4 py-1 my-2 text-white/70 italic">
+                  {children}
+                </blockquote>
+              ),
+              table: ({ children }) => (
+                <div className="my-3 overflow-x-auto rounded-xl border border-white/10">
+                  <table className="w-full border-collapse divide-y divide-white/10 text-xs">
+                    {children}
+                  </table>
+                </div>
+              ),
+              thead: ({ children }) => <thead className="bg-white/5">{children}</thead>,
+              th: ({ children }) => (
+                <th className="px-3 py-2 text-left font-semibold text-white/90">
+                  {children}
+                </th>
+              ),
+              td: ({ children }) => (
+                <td className="px-3 py-2 text-white/70 border-t border-white/5">
+                  {children}
+                </td>
+              ),
+            }}
+          >
+            {msg.content}
+          </ReactMarkdown>
         </div>
 
         {!isUser && msg.sources && msg.sources.length > 0 ? (
