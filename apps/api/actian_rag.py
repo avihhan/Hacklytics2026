@@ -191,3 +191,12 @@ def delete_doc_vectors(doc_id: str):
         except Exception:
             pass  # best-effort cleanup
 
+
+def clear_all_vectors() -> dict:
+    """Delete the whole tax collection and recreate it empty."""
+    with CortexClient(ACTIAN_HOST) as client:
+        if client.has_collection(COLLECTION_NAME):
+            client.delete_collection(COLLECTION_NAME)
+
+    init_collection()
+    return {"cleared": True, "collection": COLLECTION_NAME}

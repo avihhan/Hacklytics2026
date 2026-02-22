@@ -29,6 +29,14 @@ export async function deleteDoc(docId: string) {
   return handle(res);
 }
 
+export async function clearRagVectors() {
+  const res = await fetch(`${API}/v1/rag/clear`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+  return handle(res);
+}
+
 export async function generateReport(payload: unknown) {
   const res = await fetch(`${API}/v1/report`, {
     method: "POST",
@@ -46,5 +54,32 @@ export async function chatAsk(payload: unknown) {
     body: JSON.stringify(payload),
   });
 
+  return handle(res);
+}
+
+export type ReportRecommendation = {
+  title: string;
+  impact: "High" | "Medium" | "Low";
+  confidence: "High" | "Med" | "Low";
+  explanation: string;
+  required_docs: string[];
+  source_docs?: string[];
+};
+
+export type ReportRecommendationsResponse = {
+  summary?: string;
+  recommendations: ReportRecommendation[];
+  doc_count: number;
+  analyzed_doc_ids: string[];
+};
+
+export async function getReportRecommendations(payload?: {
+  active_doc_ids?: string[];
+}): Promise<ReportRecommendationsResponse> {
+  const res = await fetch(`${API}/v1/recommendations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload ?? {}),
+  });
   return handle(res);
 }
