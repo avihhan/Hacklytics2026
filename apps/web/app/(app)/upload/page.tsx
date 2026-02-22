@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { uploadTaxDoc, listDocs, deleteDoc } from "@/lib/api";
+import { uploadTaxDoc, listDocs, deleteDoc, clearRagVectors } from "@/lib/api";
 
 type UploadedDoc = {
   doc_id: string;
@@ -58,12 +58,14 @@ function formatBytes(bytes: number) {
 }
 
 export default function UploadPage() {
+  const LS_CHAT = "taxpilot_chat_v1";
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const [docs, setDocs] = useState<UploadedDoc[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [toast, setToast] = useState<string>("");
   const [uploading, setUploading] = useState(false);
+  const [clearingRag, setClearingRag] = useState(false);
 
   // Load docs from API on mount
   useEffect(() => {
@@ -108,6 +110,7 @@ export default function UploadPage() {
     setUploading(false);
 
     if (successCount > 0) {
+      localStorage.removeItem(LS_CHAT);
       setToast(`${successCount} file${successCount > 1 ? "s" : ""} uploaded ✅`);
       window.setTimeout(() => setToast(""), 1800);
     }
@@ -142,6 +145,30 @@ export default function UploadPage() {
     setDocs([]);
     setToast("Cleared uploads");
     window.setTimeout(() => setToast(""), 1200);
+  }
+
+  async function clearActian() {
+    setClearingRag(true);
+    try {
+      await clearRagVectors();
+      setToast("Cleared Actian vectors");
+    } catch {
+      setToast("Failed to clear Actian vectors");
+    } finally {
+      setClearingRag(false);
+      window.setTimeout(() => setToast(""), 1600);
+      // refresh list so rag_status reflects backend update
+      try {
+        const data = await listDocs();
+        const mapped = (data as UploadedDoc[]).map((d) => ({
+          ...d,
+          status: "Ready" as const,
+        }));
+        setDocs(mapped);
+      } catch {
+        /* ignore */
+      }
+    }
   }
 
   const supported = ["PDF", "PNG", "JPG"];
@@ -200,6 +227,13 @@ export default function UploadPage() {
           subtitle="Drag and drop files here — stored on the server."
           right={
             <div className="flex gap-2">
+              <button
+                onClick={clearActian}
+                disabled={clearingRag}
+                className="rounded-xl border border-red-300/40 bg-red-300/10 px-3 py-2 text-xs font-semibold text-red-100 hover:bg-red-300/20 transition disabled:opacity-50"
+              >
+                {clearingRag ? "Clearing Actian…" : "Clear Actian"}
+              </button>
               <button
                 onClick={clearAll}
                 className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10 transition"
@@ -312,6 +346,9 @@ export default function UploadPage() {
             </div>
             <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
               Never commit API keys or .env files to GitHub.
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+              Chat history auto-clears after new uploads to avoid stale context.
             </div>
             <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
               TaxPilot is organizational and educational — not tax advice.
