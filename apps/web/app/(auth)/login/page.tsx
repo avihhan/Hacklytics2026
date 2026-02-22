@@ -15,9 +15,7 @@ function LoginForm() {
     <div className="mx-auto max-w-md">
       <div className="rounded-3xl border border-white/10 bg-white/5 p-7">
         <h1 className="text-2xl font-semibold">Welcome back</h1>
-        <p className="mt-1 text-sm text-white/70">
-          Continue to your document dashboard and filing readiness workflow.
-        </p>
+        <p className="mt-1 text-sm text-white/70">Sign in to continue.</p>
 
         <form className="mt-6 space-y-4" onSubmit={(e) => e.preventDefault()}>
           <div>
@@ -46,7 +44,7 @@ function LoginForm() {
             }}
             className="w-full rounded-xl bg-emerald-400 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-300 transition"
           >
-            Sign in
+            Sign in (demo)
           </button>
         </form>
 
