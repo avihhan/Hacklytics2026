@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { loginDummy } from "@/lib/auth";
 
-export default function SignupPage() {
+function SignupForm() {
   const router = useRouter();
   const sp = useSearchParams();
   const next = sp.get("next") ?? "/report";
@@ -102,5 +102,13 @@ export default function SignupPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={<div className="mx-auto max-w-md animate-pulse rounded-3xl border border-white/10 bg-white/5 p-7 h-80" />}>
+      <SignupForm />
+    </Suspense>
   );
 }
