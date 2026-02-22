@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 import { loginDummy } from "@/lib/auth";
 
-export default function Login() {
+function LoginForm() {
   const router = useRouter();
   const sp = useSearchParams();
   const next = sp.get("next") ?? "/dashboard";
@@ -55,5 +56,13 @@ export default function Login() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function Login() {
+  return (
+    <Suspense fallback={<div className="mx-auto max-w-md animate-pulse rounded-3xl border border-white/10 bg-white/5 p-7 h-80" />}>
+      <LoginForm />
+    </Suspense>
   );
 }
