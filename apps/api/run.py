@@ -1,6 +1,7 @@
 import os
 import uuid
 import json
+import re
 from pathlib import Path
 from flask import Flask, jsonify, request
 from flask_cors import CORS
@@ -90,6 +91,249 @@ def _load_manifest() -> list[dict]:
 def _save_manifest(entries: list[dict]):
     MANIFEST_PATH.write_text(json.dumps(entries, indent=2))
 
+def _to_number(value):
+    """Best-effort numeric coercion for extracted tax values."""
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if not isinstance(value, str):
+        return None
+    raw = value.strip()
+    if not raw:
+        return None
+    # Keep only characters that can appear in number-like tax fields.
+    cleaned = re.sub(r"[^0-9.\-(),]", "", raw)
+    if not cleaned:
+        return None
+    negative = cleaned.startswith("(") and cleaned.endswith(")")
+    cleaned = cleaned.strip("()").replace(",", "")
+    try:
+        parsed = float(cleaned)
+    except ValueError:
+        return None
+    return -parsed if negative else parsed
+
+def _iter_kv(node):
+    """Yield (key, value) pairs recursively from nested JSON-like structures."""
+    if isinstance(node, dict):
+        for k, v in node.items():
+            yield k, v
+            yield from _iter_kv(v)
+    elif isinstance(node, list):
+        for item in node:
+            yield from _iter_kv(item)
+
+def _derive_filing_status(extracted: dict):
+    profile = extracted.get("taxpayer_profile") or {}
+    status = profile.get("filing_status")
+    if isinstance(status, str) and status.strip():
+        return status.strip()
+
+    for key, value in _iter_kv(extracted):
+        key_l = str(key).lower()
+        if "filing status" in key_l:
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+            if isinstance(value, bool) and value:
+                # Ex: "Filing Status - Single": true
+                parts = str(key).split("-")
+                candidate = parts[-1].strip() if len(parts) > 1 else str(key).strip()
+                if candidate:
+                    return candidate
+    return "Not Filed"
+
+def _derive_employers(extracted: dict) -> list[str]:
+    """Find and return unique employer names from the extracted JSON."""
+    employers = set()
+    for key, value in _iter_kv(extracted):
+        key_l = str(key).lower()
+        if key_l in ("employer", "employer_name", "company", "company_name"):
+            if isinstance(value, str) and value.strip():
+                # Avoid capturing generic labels or EINs if possible, just take the string
+                val_stripped = value.strip()
+                if len(val_stripped) > 2 and "ein" not in val_stripped.lower():
+                    employers.add(val_stripped)
+    return sorted(list(employers))
+
+def _derive_state(extracted: dict):
+    profile = extracted.get("taxpayer_profile") or {}
+    for key in ["state_of_residence", "state", "state_code"]:
+        value = profile.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    for key, value in _iter_kv(profile):
+        if "state" in str(key).lower() and isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+def _derive_taxpayer_name(extracted: dict):
+    profile = extracted.get("taxpayer_profile") or {}
+    first = str(profile.get("first_name") or "").strip()
+    last = str(profile.get("last_name") or "").strip()
+    full = f"{first} {last}".strip()
+    return full or None
+
+def _derive_income(extracted: dict):
+    """Estimate income by preferring common canonical totals from extracted fields."""
+    ranked_candidates = []
+    for key, value in _iter_kv(extracted):
+        key_l = str(key).lower()
+        amount = _to_number(value)
+        if amount is None or amount < 0:
+            continue
+
+        score = None
+        if "adjusted gross income" in key_l or key_l == "agi":
+            score = 100
+        elif "total income" in key_l:
+            score = 90
+        elif "line 9" in key_l and ("1040" in key_l or "income" in key_l):
+            score = 80
+        elif "line 1a" in key_l and ("w-2" in key_l or "wages" in key_l):
+            score = 70
+        elif "wages" in key_l and "box 1" in key_l:
+            score = 60
+
+        if score is not None:
+            ranked_candidates.append((score, amount))
+
+    if not ranked_candidates:
+        return None
+    ranked_candidates.sort(key=lambda x: (x[0], x[1]), reverse=True)
+    return ranked_candidates[0][1]
+
+def _build_dashboard_summary():
+    manifest = _load_manifest()
+    docs_uploaded = len(manifest)
+    docs_needed = 5
+    docs_extracted = 0
+    rag_completed = 0
+    rag_failed = 0
+    forms_seen = set()
+    years_seen = set()
+    keyword_blob_parts = []
+    latest_uploaded_doc = None
+
+    for entry in manifest:
+        rag_status = str(entry.get("rag_status", "")).lower()
+        if rag_status.startswith("completed"):
+            rag_completed += 1
+        elif rag_status.startswith("failed"):
+            rag_failed += 1
+
+        extracted_path = EXTRACTED_DIR / f"{entry['doc_id']}.json"
+        if not extracted_path.exists():
+            continue
+        docs_extracted += 1
+
+        try:
+            extracted = json.loads(extracted_path.read_text())
+        except Exception:
+            continue
+
+        for record in extracted.get("tax_records", []) or []:
+            year = record.get("tax_year")
+            if isinstance(year, int):
+                years_seen.add(year)
+            docs = record.get("documents", {}) or {}
+            if isinstance(docs, dict):
+                for form_name in docs.keys():
+                    forms_seen.add(str(form_name))
+
+        keyword_blob_parts.append(json.dumps(extracted).lower())
+
+        if latest_uploaded_doc is None or entry.get("uploaded_at", 0) > latest_uploaded_doc.get("uploaded_at", 0):
+            latest_uploaded_doc = {"entry": entry, "extracted": extracted}
+
+    latest_extracted = (latest_uploaded_doc or {}).get("extracted") if latest_uploaded_doc else {}
+    taxpayer_name = _derive_taxpayer_name(latest_extracted or {})
+    filing_status = _derive_filing_status(latest_extracted or {})
+    state = _derive_state(latest_extracted or {}) or "Unknown"
+    est_income = _derive_income(latest_extracted or {})
+    
+    # We aggregate employers from ALL extracted docs to find all of them
+    all_employers = set()
+    for entry in manifest:
+        extracted_path = EXTRACTED_DIR / f"{entry['doc_id']}.json"
+        if extracted_path.exists():
+            try:
+                extracted = json.loads(extracted_path.read_text())
+                all_employers.update(_derive_employers(extracted))
+            except Exception:
+                pass
+    employers_list = sorted(list(all_employers))
+
+    extraction_ratio = (docs_extracted / docs_uploaded) if docs_uploaded else 0
+    docs_ratio = min(docs_uploaded / docs_needed, 1.0)
+    base_score = (docs_ratio * 60.0) + (extraction_ratio * 30.0)
+    if filing_status != "Not Filed":
+        base_score += 5.0
+    if state != "Unknown":
+        base_score += 5.0
+    readiness_score = int(round(min(base_score, 100.0)))
+
+    blob = " ".join(keyword_blob_parts)
+    flags = []
+    if "1098-e" in blob or "student loan" in blob:
+        flags.append({
+            "title": "Student loan interest review",
+            "impact": "Medium",
+            "confidence": "High",
+            "why": "Detected student-loan-related fields in extracted documents.",
+            "needed": ["Confirm 1098-E amount", "MAGI threshold check"],
+        })
+    if "1098-t" in blob or "tuition" in blob or "education" in blob:
+        flags.append({
+            "title": "Education credit check (AOTC/LLC)",
+            "impact": "High",
+            "confidence": "Med",
+            "why": "Education-related fields were found; credits may be available.",
+            "needed": ["Form 1098-T", "Qualified expense receipts"],
+        })
+    if "schedule a" in blob or "mortgage" in blob or "charity" in blob or "medical" in blob:
+        flags.append({
+            "title": "Itemized deduction comparison",
+            "impact": "Low",
+            "confidence": "Med",
+            "why": "Potential itemizable categories appear in extracted data.",
+            "needed": ["Mortgage interest (1098)", "Donation receipts", "Medical totals"],
+        })
+
+    if not flags:
+        flags.append({
+            "title": "Add more supporting documents",
+            "impact": "Medium",
+            "confidence": "Med",
+            "why": "More uploaded forms will improve coverage and confidence.",
+            "needed": ["W-2/1099 forms", "1098 forms", "Prior-year 1040 if available"],
+        })
+
+    return {
+        "snapshot": {
+            "taxpayer_name": taxpayer_name,
+            "filing_status": filing_status,
+            "state": state,
+            "est_income": int(est_income) if est_income is not None else None,
+            "docs_uploaded": docs_uploaded,
+            "docs_needed": docs_needed,
+            "docs_extracted": docs_extracted,
+            "employers": employers_list,
+            "latest_tax_year": max(years_seen) if years_seen else None,
+        },
+        "readiness": {
+            "score": readiness_score,
+            "extraction_status": "Complete" if docs_uploaded > 0 and docs_extracted == docs_uploaded else "In progress",
+            "rag_completed": rag_completed,
+            "rag_failed": rag_failed,
+        },
+        "flags": flags,
+        "meta": {
+            "forms_detected": sorted(forms_seen),
+            "years_detected": sorted(years_seen, reverse=True),
+        },
+    }
+
 # ── Upload / Delete / List ───────────────────────────────────────
 
 @app.post("/v1/upload")
@@ -151,6 +395,10 @@ def upload_file():
 @app.get("/v1/uploads")
 def list_uploads():
     return jsonify(_load_manifest())
+
+@app.get("/v1/dashboard")
+def dashboard_summary():
+    return jsonify(_build_dashboard_summary())
 
 
 @app.delete("/v1/upload/<doc_id>")

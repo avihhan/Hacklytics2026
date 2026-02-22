@@ -40,7 +40,9 @@ function SignupForm() {
     <div className="mx-auto max-w-md">
       <div className="rounded-3xl border border-white/10 bg-white/5 p-7">
         <h1 className="text-2xl font-semibold">Create an account</h1>
-        <p className="mt-1 text-sm text-white/70">Sign up to get started.</p>
+        <p className="mt-1 text-sm text-white/70">
+          Set up your workspace to upload documents and track filing readiness.
+        </p>
 
         <form className="mt-6 space-y-4" onSubmit={onSubmit}>
           <div>
@@ -90,7 +92,7 @@ function SignupForm() {
             type="submit"
             className="w-full rounded-xl bg-emerald-400 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-300 transition"
           >
-            Create account (demo)
+            Create account
           </button>
         </form>
 

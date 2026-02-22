@@ -28,7 +28,6 @@ export default function AppNav() {
 
 
   const itemW = 104; // px (w-[104px])
-  const itemH = 36;  // px (h-9)
   const gap = 8;     // px (gap-2)
 
   const left = activeIndex * (itemW + gap);

@@ -29,6 +29,11 @@ export async function deleteDoc(docId: string) {
   return handle(res);
 }
 
+export async function getDashboardSummary() {
+  const res = await fetch(`${API}/v1/dashboard`);
+  return handle(res);
+}
+
 export async function generateReport(payload: unknown) {
   const res = await fetch(`${API}/v1/report`, {
     method: "POST",
