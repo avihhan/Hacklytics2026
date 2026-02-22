@@ -29,7 +29,7 @@ export default function Landing() {
             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-white/70">
               Hacklytics 2026 • Golden Byte
               <span className="h-1 w-1 rounded-full bg-white/40" />
-              Demo Mode
+              MVP
             </div>
 
             <h1 className="mt-5 text-4xl md:text-5xl font-semibold tracking-tight">
@@ -39,9 +39,9 @@ export default function Landing() {
             </h1>
 
             <p className="mt-4 text-white/70">
-              Upload W-2/1099/1098/1040 documents. TaxPilot extracts key fields,
-              surfaces opportunity flags, and answers questions grounded in your
-              documents.
+              Upload W-2/1099/1098/1040 documents, extract structured data, and
+              get grounded guidance on missing docs and next actions from your
+              real uploads.
             </p>
 
             <div className="mt-7 flex flex-wrap gap-3">
@@ -61,7 +61,7 @@ export default function Landing() {
                 href="/dashboard"
                 className="rounded-xl border border-white/10 px-4 py-2 text-sm font-semibold text-white/80 hover:text-white hover:bg-white/5 transition"
               >
-                View sample dashboard
+                Open dashboard
               </Link>
             </div>
 
@@ -73,7 +73,7 @@ export default function Landing() {
                 Grounded responses (RAG)
               </span>
               <span className="inline-flex items-center rounded-full border border-white/10 bg-black/30 px-3 py-1 text-xs text-white/80">
-                Phone agent demo
+                Voice copilot
               </span>
             </div>
           </div>
@@ -82,15 +82,15 @@ export default function Landing() {
         <section className="grid gap-4 md:grid-cols-3">
           <Feature
             title="Upload & Extract"
-            desc="Turn messy tax docs into a structured snapshot."
+            desc="Parse each uploaded file into structured tax fields."
           />
           <Feature
-            title="Opportunity Flags"
-            desc="Credits/deductions to review + what proofs you need."
+            title="Readiness & Gaps"
+            desc="See what is complete, what is missing, and what to verify."
           />
           <Feature
             title="Ask TaxPilot"
-            desc="Chat grounded in your documents to reduce hallucinations."
+            desc="Chat answers are grounded in uploaded documents."
           />
         </section>
 
@@ -98,7 +98,7 @@ export default function Landing() {
           <div className="text-sm font-semibold">Disclaimer</div>
           <p className="mt-2 text-sm text-white/70">
             TaxPilot is an educational and organizational tool and does not
-            provide tax advice. But try it if you dare
+            provide tax advice.
           </p>
         </section>
       </div>

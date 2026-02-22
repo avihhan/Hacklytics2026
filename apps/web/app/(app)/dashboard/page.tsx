@@ -1,10 +1,44 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { getDashboardSummary } from "@/lib/api";
 
 function cn(...xs: Array<string | false | null | undefined>) {
   return xs.filter(Boolean).join(" ");
 }
+
+type DashboardFlag = {
+  title: string;
+  impact: "High" | "Medium" | "Low";
+  confidence: "High" | "Med" | "Low";
+  why: string;
+  needed: string[];
+};
+
+type DashboardData = {
+  snapshot: {
+    filing_status: string;
+    state: string;
+    est_income: number | null;
+    docs_uploaded: number;
+    docs_needed: number;
+    docs_extracted: number;
+    employers: string[];
+    latest_tax_year: number | null;
+  };
+  readiness: {
+    score: number;
+    extraction_status: string;
+    rag_completed: number;
+    rag_failed: number;
+  };
+  flags: DashboardFlag[];
+  meta: {
+    forms_detected: string[];
+    years_detected: number[];
+  };
+};
 
 function Card({
   title,
@@ -108,45 +142,63 @@ function FlagCard({
 }
 
 export default function DashboardPage() {
-  // Mock data for now — swap to backend later
-  const snapshot = {
-    filingStatus: "Single",
-    state: "GA",
-    estIncome: 74250,
-    docsUploaded: 3,
-    docsNeeded: 5,
-    extraction: "Complete",
-  };
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const flags = [
-    {
-      title: "Student loan interest (1098-E)",
-      impact: "Medium" as const,
-      confidence: "High" as const,
-      why: "Detected a 1098-E. You may be able to deduct eligible student loan interest.",
-      needed: ["1098-E", "MAGI threshold check"],
-    },
-    {
-      title: "Education credit (AOTC/LLC)",
-      impact: "High" as const,
-      confidence: "Med" as const,
-      why: "If you paid qualified tuition, you may qualify for an education credit.",
-      needed: ["1098-T", "Qualified expenses receipts"],
-    },
-    {
-      title: "Itemized vs standard deduction check",
-      impact: "Low" as const,
-      confidence: "Low" as const,
-      why: "If you have mortgage interest/charity/medical expenses, itemizing may help.",
-      needed: ["Charity receipts", "Mortgage interest (1098)", "Medical expense totals"],
-    },
-  ];
+  useEffect(() => {
+    let active = true;
+    getDashboardSummary()
+      .then((payload) => {
+        if (!active) return;
+        setData(payload as DashboardData);
+      })
+      .catch((err) => {
+        if (!active) return;
+        setError(err instanceof Error ? err.message : "Failed to load dashboard");
+      })
+      .finally(() => {
+        if (!active) return;
+        setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const snapshot = useMemo(
+    () =>
+      data?.snapshot ?? {
+        filing_status: "Not Filed",
+        state: "Unknown",
+        est_income: null,
+        docs_uploaded: 0,
+        docs_needed: 5,
+        docs_extracted: 0,
+        employers: [],
+        latest_tax_year: null,
+      },
+    [data],
+  );
+
+  const readiness = useMemo(
+    () =>
+      data?.readiness ?? {
+        score: 0,
+        extraction_status: "In progress",
+        rag_completed: 0,
+        rag_failed: 0,
+      },
+    [data],
+  );
+
+  const flags = data?.flags ?? [];
 
   const nextSteps = [
     { label: "Upload missing docs", desc: "Add any W-2/1099/1098/1040 you haven't uploaded yet.", href: "/upload" },
     { label: "Review report", desc: "See extracted fields + opportunity flags in one place.", href: "/report" },
     { label: "Ask TaxPilot", desc: "Get grounded answers based on your documents.", href: "/chat" },
-    { label: "Try phone demo", desc: "Call the agent for a walkthrough (later).", href: "/call" },
+    { label: "Use voice copilot", desc: "Run a guided voice walkthrough of readiness and next steps.", href: "/call" },
   ];
 
   return (
@@ -161,7 +213,7 @@ export default function DashboardPage() {
             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-white/70">
               TaxPilot • Filing Readiness
               <span className="h-1 w-1 rounded-full bg-white/40" />
-              Demo Mode
+              {loading ? "Syncing" : "Live Data"}
             </div>
 
             <h1 className="mt-4 text-4xl font-semibold tracking-tight">
@@ -204,20 +256,26 @@ export default function DashboardPage() {
               </div>
 
               <div className="mt-4">
-                <div className="text-3xl font-semibold">78%</div>
+                <div className="text-3xl font-semibold">{readiness.score}%</div>
                 <div className="mt-1 text-sm text-white/70">
-                  Good start — upload remaining docs to increase confidence.
+                  {snapshot.docs_uploaded > 0
+                    ? "Progress updates automatically after extraction finishes."
+                    : "Upload your first document to initialize your dashboard."}
                 </div>
 
                 <div className="mt-4 h-2 w-full rounded-full bg-white/10">
-                  <div className="h-2 w-[78%] rounded-full bg-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.45)]" />
+                  <div
+                    className="h-2 rounded-full bg-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.45)]"
+                    style={{ width: `${readiness.score}%` }}
+                  />
                 </div>
 
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <Pill>Docs: {snapshot.docsUploaded}/{snapshot.docsNeeded}</Pill>
-                  <Pill>Extraction: {snapshot.extraction}</Pill>
+                  <Pill>Docs: {snapshot.docs_uploaded}/{snapshot.docs_needed}</Pill>
+                  <Pill>Extraction: {readiness.extraction_status}</Pill>
                   <Pill>Flags: {flags.length}</Pill>
                 </div>
+                {error ? <div className="mt-3 text-xs text-amber-300">{error}</div> : null}
               </div>
             </div>
           </div>
@@ -226,12 +284,24 @@ export default function DashboardPage() {
 
       {/* Snapshot + Quick Actions */}
       <section className="grid gap-4 md:grid-cols-3">
-        <Card title="Snapshot" subtitle="High-level summary from extracted fields (mock).">
+        <Card title="Snapshot" subtitle="High-level summary from extracted fields.">
           <div className="grid grid-cols-2 gap-3">
-            <Stat label="Filing Status" value={snapshot.filingStatus} />
+            <Stat label="Filing Status" value={snapshot.filing_status} />
             <Stat label="State" value={snapshot.state} />
-            <Stat label="Est. Income" value={`$${snapshot.estIncome.toLocaleString()}`} hint="From uploaded docs" />
-            <Stat label="Docs Uploaded" value={`${snapshot.docsUploaded}/${snapshot.docsNeeded}`} hint="W-2, 1099, 1098, 1040" />
+            <Stat
+              label="Employers"
+              value={snapshot.employers?.length > 0 ? snapshot.employers.join(", ") : "None"}
+            />
+            <Stat
+              label="Est. Income"
+              value={snapshot.est_income != null ? `$${snapshot.est_income.toLocaleString()}` : "Not detected"}
+              hint="From latest extracted doc"
+            />
+            <Stat
+              label="Docs Uploaded"
+              value={`${snapshot.docs_uploaded}/${snapshot.docs_needed}`}
+              hint={`Extracted: ${snapshot.docs_extracted}`}
+            />
           </div>
         </Card>
 
@@ -293,9 +363,13 @@ export default function DashboardPage() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
-          {flags.map((f) => (
-            <FlagCard key={f.title} {...f} />
-          ))}
+          {flags.length > 0 ? (
+            flags.map((f) => <FlagCard key={f.title} {...f} />)
+          ) : (
+            <div className="rounded-3xl border border-white/10 bg-white/5 p-5 text-sm text-white/70">
+              No opportunity flags yet. Upload additional documents to improve signal.
+            </div>
+          )}
         </div>
       </section>
 
