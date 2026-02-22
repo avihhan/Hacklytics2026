@@ -4,20 +4,18 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 
 from google import genai
-from google.genai import types
+from google.genai import types, errors as genai_errors
 
 load_dotenv()
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": ["http://localhost:3000"]}})
 
-API_KEY = os.getenv("GEMINI_API_KEY")
+PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT")
+LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
+MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
 
-@app.get("/health")
-def health():
-    return jsonify({"ok": True, "service": "taxpilot-api"})
-
-# TEMP: mock doc store (we’ll replace with real PDF extraction later)
+# TEMP doc store (replace later with real PDF extraction)
 DOC_STORE = {
     "1040_2025": {
         "title": "Form 1040 • 2025",
@@ -47,11 +45,24 @@ def build_doc_context(active_doc_ids, max_chars=6000):
         ctx = ctx[:max_chars] + "\n…(truncated)"
     return ctx, sources
 
+def vertex_client():
+    if not PROJECT:
+        raise RuntimeError("Missing GOOGLE_CLOUD_PROJECT in apps/api/.env")
+    return genai.Client(vertexai=True, project=PROJECT, location=LOCATION)
+
+@app.get("/health")
+def health():
+    return jsonify({
+        "ok": True,
+        "service": "taxpilot-api",
+        "vertex": True,
+        "project": PROJECT,
+        "location": LOCATION,
+        "model": MODEL,
+    })
+
 @app.post("/v1/chat")
 def chat():
-    if not API_KEY:
-        return jsonify({"error": "Missing GEMINI_API_KEY in .env"}), 500
-
     payload = request.get_json(silent=True) or {}
     message = (payload.get("message") or "").strip()
     active_doc_ids = payload.get("active_doc_ids") or []
@@ -63,10 +74,10 @@ def chat():
 
     system = (
         "You are TaxPilot, an educational tax filing assistant. "
-        "When Document Context is provided, ground your answer in it and cite it briefly. "
-        "If context is missing, ask which document/return the user means. "
+        "When Document Context is provided, ground your answer in it. "
+        "If context is missing, ask which return/document to use. "
         "Always include the sentence: 'Educational only, not tax advice.' "
-        "Be concise and action-oriented."
+        "Be concise, structured, and action-oriented."
     )
 
     prompt = f"""{system}
@@ -78,17 +89,28 @@ User:
 {message}
 """.strip()
 
-    client = genai.Client(api_key=API_KEY)
-
-    resp = client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=[types.Content(role="user", parts=[types.Part(text=prompt)])],
-    )
-
-    return jsonify({
-        "answer": resp.text or "",
-        "sources": sources,  
-    })
+    try:
+        client = vertex_client()
+        resp = client.models.generate_content(
+            model=MODEL,
+            contents=[types.Content(role="user", parts=[types.Part(text=prompt)])],
+        )
+        answer = resp.text or ""
+        return jsonify({"answer": answer, "sources": sources})
+    except genai_errors.APIError as e:
+        # Vertex/Gemini API error
+        return jsonify({
+            "error": "Gemini/Vertex request failed",
+            "detail": str(e),
+            "project": PROJECT,
+            "location": LOCATION,
+            "model": MODEL,
+        }), 500
+    except Exception as e:
+        return jsonify({
+            "error": "Server error",
+            "detail": str(e),
+        }), 500
 
 if __name__ == "__main__":
     print("Starting TaxPilot API on http://127.0.0.1:8000")
