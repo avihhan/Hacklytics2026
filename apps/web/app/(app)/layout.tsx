@@ -1,43 +1,28 @@
 "use client";
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { isAuthed } from "@/lib/auth";
 import Stepper from "@/components/Stepper";
 
-function useIsClient() {
-  return useSyncExternalStore(
-    () => () => {},
-    () => true,
-    () => false,
-  );
-}
-
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const isClient = useIsClient();
-  const authed = isClient ? isAuthed() : false;
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (!isClient) return;
-    if (!authed) {
+    const ok = isAuthed();
+    if (!ok) {
       router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+      return;
     }
-  }, [authed, isClient, pathname, router]);
+    setReady(true);
+  }, [router, pathname]);
 
-  if (!isClient) {
+  if (!ready) {
     return (
       <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/70">
-        Checking session...
-      </div>
-    );
-  }
-
-  if (!authed) {
-    return (
-      <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/70">
-        Redirecting to sign in...
+        Checking session…
       </div>
     );
   }

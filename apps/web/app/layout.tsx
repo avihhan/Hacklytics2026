@@ -36,7 +36,7 @@ export default function RootLayout({
               <div className="leading-tight">
                 <div className="font-semibold tracking-tight">TaxPilot</div>
                 <div className="text-xs text-white/60">
-                  Filing readiness workspace
+                  Educational • Not tax advice
                 </div>
               </div>
             </Link>
@@ -49,8 +49,8 @@ export default function RootLayout({
 
         <footer className="border-t border-white/10">
           <div className="mx-auto max-w-6xl px-4 py-6 text-xs text-white/60">
-            TaxPilot organizes tax documents, extraction output, and next-step guidance.
-            Educational only, not tax advice.
+            TaxPilot organizes documents and highlights potential opportunities.
+            It does not provide tax advice.
           </div>
         </footer>
       </body>

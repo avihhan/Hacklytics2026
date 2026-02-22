@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { getDashboardSummary, listDocs } from "@/lib/api";
 
 type Source = {
   doc: string;
@@ -26,28 +25,12 @@ type BackendChatResponse = {
     doc_id?: string;
     title?: string;
     doc?: string;
-    section?: string;
     snippet?: string;
-    score?: number;
   }>;
-};
-
-type UploadedDoc = {
-  doc_id: string;
-  original_name: string;
-  uploaded_at: number;
-};
-
-type DashboardSummary = {
-  snapshot?: {
-    taxpayer_name?: string | null;
-  };
 };
 
 const API = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 const LS_CHAT = "taxpilot_chat_v1";
-const LAST_UPLOAD_EVENT_KEY = "taxpilot_last_upload_event_v1";
-const LAST_GREETED_UPLOAD_DOC_KEY = "taxpilot_last_greeted_upload_doc_v1";
 
 function Pill({ children }: { children: React.ReactNode }) {
   return (
@@ -114,6 +97,29 @@ function Bubble({ msg }: { msg: Msg }) {
                   {children}
                 </pre>
               ),
+              blockquote: ({ children }) => (
+                <blockquote className="border-l-2 border-emerald-400/50 pl-4 py-1 my-2 text-white/70 italic">
+                  {children}
+                </blockquote>
+              ),
+              table: ({ children }) => (
+                <div className="my-3 overflow-x-auto rounded-xl border border-white/10">
+                  <table className="w-full border-collapse divide-y divide-white/10 text-xs">
+                    {children}
+                  </table>
+                </div>
+              ),
+              thead: ({ children }) => <thead className="bg-white/5">{children}</thead>,
+              th: ({ children }) => (
+                <th className="px-3 py-2 text-left font-semibold text-white/90">
+                  {children}
+                </th>
+              ),
+              td: ({ children }) => (
+                <td className="px-3 py-2 text-white/70 border-t border-white/5">
+                  {children}
+                </td>
+              ),
             }}
           >
             {msg.content}
@@ -123,17 +129,21 @@ function Bubble({ msg }: { msg: Msg }) {
         {!isUser && msg.sources && msg.sources.length > 0 ? (
           <div className="mt-3 rounded-2xl border border-white/10 bg-black/20 p-3">
             <div className="flex items-center justify-between">
-              <div className="text-xs font-semibold text-white/70">Sources used</div>
+              <div className="text-xs font-semibold text-white/70">
+                Sources used
+              </div>
               <Pill>{msg.sources.length}</Pill>
             </div>
 
             <div className="mt-2 space-y-2">
               {msg.sources.map((s, idx) => (
                 <div
-                  key={`${s.doc}_${idx}`}
+                  key={idx}
                   className="rounded-xl border border-white/10 bg-black/20 p-3"
                 >
-                  <div className="text-xs font-semibold text-white/80">{s.doc}</div>
+                  <div className="text-xs font-semibold text-white/80">
+                    {s.doc}
+                  </div>
                   <div className="mt-1 text-xs text-white/60">{s.snippet}</div>
                 </div>
               ))}
@@ -153,10 +163,10 @@ function toSources(raw?: BackendChatResponse["sources"]): Source[] {
   if (!raw || !Array.isArray(raw)) return [];
   return raw
     .map((s) => ({
-      doc: s.title ?? s.doc ?? s.section ?? s.doc_id ?? "Document",
+      doc: s.title ?? s.doc ?? s.doc_id ?? "Document",
       snippet: s.snippet ?? "",
     }))
-    .filter((s) => Boolean(s.doc));
+    .filter((s) => s.doc && s.snippet);
 }
 
 export default function ChatPage() {
@@ -166,9 +176,12 @@ export default function ChatPage() {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
-  const [activeDocId, setActiveDocId] = useState("auto");
-  const [docs, setDocs] = useState<UploadedDoc[]>([]);
-  const [apiStatus, setApiStatus] = useState<"unknown" | "ok" | "down">("unknown");
+  const [activeReturn, setActiveReturn] = useState<
+    "auto" | "1040_2025" | "w2_2025" | "1098e_2025"
+  >("auto");
+  const [apiStatus, setApiStatus] = useState<"unknown" | "ok" | "down">(
+    "unknown"
+  );
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
@@ -187,6 +200,7 @@ export default function ChatPage() {
   }, [presetQ]);
 
   useEffect(() => {
+    // lightweight health check
     (async () => {
       try {
         const r = await fetch(`${API}/health`, { method: "GET" });
@@ -197,73 +211,14 @@ export default function ChatPage() {
     })();
   }, []);
 
-  useEffect(() => {
-    listDocs()
-      .then((res) => {
-        const loaded = (res as UploadedDoc[]).sort((a, b) => b.uploaded_at - a.uploaded_at);
-        setDocs(loaded);
-      })
-      .catch(() => {
-        setDocs([]);
-      });
-  }, []);
-
-  useEffect(() => {
-    if (docs.length === 0) return;
-
-    const raw = localStorage.getItem(LAST_UPLOAD_EVENT_KEY);
-    if (!raw) return;
-
-    let eventDocId = "";
-    try {
-      const parsed = JSON.parse(raw) as { doc_id?: string };
-      eventDocId = parsed.doc_id ?? "";
-    } catch {
-      return;
-    }
-    if (!eventDocId) return;
-    if (!docs.some((doc) => doc.doc_id === eventDocId)) return;
-
-    const greetedDocId = localStorage.getItem(LAST_GREETED_UPLOAD_DOC_KEY);
-    if (greetedDocId === eventDocId) return;
-
-    getDashboardSummary()
-      .then((summary) => {
-        const payload = summary as DashboardSummary;
-        const name = payload.snapshot?.taxpayer_name?.trim() || "there";
-        setMsgs((prev) => [
-          ...prev,
-          {
-            id: genId(),
-            role: "assistant",
-            content: `Hi ${name}! I see your document was uploaded. Want me to summarize what changed?`,
-            ts: Date.now(),
-          },
-        ]);
-        localStorage.setItem(LAST_GREETED_UPLOAD_DOC_KEY, eventDocId);
-      })
-      .catch(() => {
-        setMsgs((prev) => [
-          ...prev,
-          {
-            id: genId(),
-            role: "assistant",
-            content: "Hi there! I see your document was uploaded. Want me to summarize what changed?",
-            ts: Date.now(),
-          },
-        ]);
-        localStorage.setItem(LAST_GREETED_UPLOAD_DOC_KEY, eventDocId);
-      });
-  }, [docs]);
-
   const suggestions = useMemo(
     () => [
-      "Summarize what my uploaded docs say about my filing status.",
-      "What documents are still missing for a stronger filing package?",
-      "What opportunities should I verify next?",
-      "Give me a concise checklist for next actions.",
+      "Do I likely qualify for student loan interest deduction?",
+      "What documents am I missing for education credits?",
+      "Should I consider itemizing this year?",
+      "Summarize what you know about my filing so far.",
     ],
-    [],
+    []
   );
 
   async function send(text: string) {
@@ -287,13 +242,14 @@ export default function ChatPage() {
       {
         id: placeholderId,
         role: "assistant",
-        content: "Thinking...",
+        content: "Thinking…",
         ts: Date.now(),
       },
     ]);
 
     try {
-      const active_doc_ids = activeDocId === "auto" ? [] : [activeDocId];
+      const active_doc_ids =
+        activeReturn === "auto" ? [] : [activeReturn as string];
 
       const res = await fetch(`${API}/v1/chat`, {
         method: "POST",
@@ -320,12 +276,12 @@ export default function ChatPage() {
                 sources: toSources(data.sources),
                 ts: Date.now(),
               }
-            : m,
-        ),
+            : m
+        )
       );
 
       setApiStatus("ok");
-    } catch {
+    } catch (e: any) {
       setApiStatus("down");
       setMsgs((prev) =>
         prev.map((m) =>
@@ -333,11 +289,11 @@ export default function ChatPage() {
             ? {
                 ...m,
                 content:
-                  "Chat backend is unavailable right now. Start the API on http://localhost:8000, then retry.\n\nThis tool is educational and organizational only, not tax advice.",
+                  "Backend chat is not reachable right now.\n\nMake sure Flask is running on http://localhost:8000 and your GEMINI_API_KEY is set.\n\nEducational only, not tax advice.",
                 ts: Date.now(),
               }
-            : m,
-        ),
+            : m
+        )
       );
     } finally {
       setThinking(false);
@@ -351,6 +307,7 @@ export default function ChatPage() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-8">
         <div className="absolute -top-24 -right-24 h-72 w-72 rounded-full bg-emerald-400/20 blur-3xl" />
         <div className="absolute -bottom-24 -left-24 h-72 w-72 rounded-full bg-cyan-400/10 blur-3xl" />
@@ -360,21 +317,29 @@ export default function ChatPage() {
             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-white/70">
               TaxPilot Chat
               <span className="h-1 w-1 rounded-full bg-white/40" />
-              Document-Grounded
+              Gemini via Flask
             </div>
 
-            <h1 className="mt-4 text-4xl font-semibold tracking-tight">Ask TaxPilot</h1>
+            <h1 className="mt-4 text-4xl font-semibold tracking-tight">
+              Ask TaxPilot
+            </h1>
 
-            <p className="mt-3 max-w-2xl text-white/70">
-              Ask questions about uploaded documents, missing forms, and next filing steps.
-              Responses are grounded in extracted data and retrieval context.
+            <p className="mt-3 text-white/70 max-w-2xl">
+              Ask questions about deductions, missing documents, and next steps.
+              TaxPilot will ground answers in the selected return/documents.
             </p>
 
             <div className="mt-5 flex flex-wrap gap-2">
-              <Pill>Uploads detected: {docs.length}</Pill>
+              <Pill>Grounded responses</Pill>
               <Pill>Educational only</Pill>
+              <Pill>Demo Mode</Pill>
               <Pill>
-                API: {apiStatus === "ok" ? "Online" : apiStatus === "down" ? "Offline" : "Checking..."}
+                API:{" "}
+                {apiStatus === "ok"
+                  ? "Online"
+                  : apiStatus === "down"
+                  ? "Offline"
+                  : "Checking…"}
               </Pill>
             </div>
           </div>
@@ -396,24 +361,25 @@ export default function ChatPage() {
         </div>
       </section>
 
+      {/* Context selector + Suggestions */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-2">
           <div className="text-xs text-white/60">Active context</div>
           <select
-            value={activeDocId}
-            onChange={(e) => setActiveDocId(e.target.value)}
+            value={activeReturn}
+            onChange={(e) =>
+              setActiveReturn(e.target.value as typeof activeReturn)
+            }
             className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white/80 outline-none focus:ring-2 focus:ring-emerald-400/60"
           >
-            <option value="auto">Auto (search across all docs)</option>
-            {docs.map((doc) => (
-              <option key={doc.doc_id} value={doc.doc_id}>
-                {doc.original_name}
-              </option>
-            ))}
+            <option value="auto">Auto (no doc selected)</option>
+            <option value="1040_2025">1040 • 2025 Return</option>
+            <option value="w2_2025">W-2 • 2025</option>
+            <option value="1098e_2025">1098-E • 2025</option>
           </select>
 
           <div className="hidden md:block text-xs text-white/50">
-            {activeDocId === "auto" ? "Global context" : "Scoped to selected file"}
+            (Backend uses this to ground Gemini.)
           </div>
         </div>
 
@@ -431,19 +397,21 @@ export default function ChatPage() {
         </div>
       </div>
 
+      {/* Chat window */}
       <section className="rounded-3xl border border-white/10 bg-white/5">
         <div className="border-b border-white/10 px-5 py-4 flex items-center justify-between">
           <div className="text-sm font-semibold">Conversation</div>
           <div className="flex items-center gap-2">
             <Pill>{msgs.length} messages</Pill>
-            {thinking ? <Pill>Thinking...</Pill> : <Pill>Ready</Pill>}
+            {thinking ? <Pill>Thinking…</Pill> : <Pill>Ready</Pill>}
           </div>
         </div>
 
         <div className="px-5 py-5 space-y-4 max-h-[520px] overflow-auto">
           {msgs.length === 0 ? (
             <div className="rounded-2xl border border-white/10 bg-black/20 p-6 text-sm text-white/70">
-              No messages yet. Select context (optional) and ask a question.
+              No messages yet. Pick a context (optional) and ask a question — or
+              click a suggestion.
             </div>
           ) : (
             msgs.map((m) => <Bubble key={m.id} msg={m} />)
@@ -451,6 +419,7 @@ export default function ChatPage() {
           <div ref={bottomRef} />
         </div>
 
+        {/* Input */}
         <div className="border-t border-white/10 p-4">
           <form
             onSubmit={(e) => {
@@ -462,7 +431,7 @@ export default function ChatPage() {
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask about deductions, missing docs, or report details..."
+              placeholder="Ask about deductions, missing docs, or your report…"
               className="flex-1 rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-emerald-400/60"
             />
 
@@ -476,7 +445,8 @@ export default function ChatPage() {
           </form>
 
           <div className="mt-2 text-xs text-white/50">
-            Endpoint: <span className="text-white/70 font-mono">{API}/v1/chat</span>
+            Backend endpoint:{" "}
+            <span className="text-white/70 font-mono">{API}/v1/chat</span>
           </div>
         </div>
       </section>

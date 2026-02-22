@@ -4,8 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { uploadTaxDoc, listDocs, deleteDoc } from "@/lib/api";
 
-const LAST_UPLOAD_EVENT_KEY = "taxpilot_last_upload_event_v1";
-
 type UploadedDoc = {
   doc_id: string;
   original_name: string;
@@ -13,8 +11,6 @@ type UploadedDoc = {
   size: number;
   type: string;
   uploaded_at: number;
-  extraction_status?: string;
-  rag_status?: string;
   status: "Ready" | "Uploading" | "Failed";
 };
 
@@ -75,7 +71,7 @@ export default function UploadPage() {
       .then((data) => {
         const mapped = (data as UploadedDoc[]).map((d) => ({
           ...d,
-          status: d.extraction_status?.startsWith("failed") ? ("Failed" as const) : ("Ready" as const),
+          status: "Ready" as const,
         }));
         setDocs(mapped);
       })
@@ -97,14 +93,12 @@ export default function UploadPage() {
 
     setUploading(true);
     let successCount = 0;
-    let latestUploadedDocId: string | null = null;
 
     for (const file of arr) {
       try {
         const result = (await uploadTaxDoc(file)) as UploadedDoc;
-        result.status = result.extraction_status?.startsWith("failed") ? "Failed" : "Ready";
+        result.status = "Ready";
         setDocs((prev) => [result, ...prev]);
-        latestUploadedDocId = result.doc_id;
         successCount++;
       } catch (err) {
         console.error("Upload failed:", err);
@@ -114,15 +108,6 @@ export default function UploadPage() {
     setUploading(false);
 
     if (successCount > 0) {
-      if (latestUploadedDocId) {
-        localStorage.setItem(
-          LAST_UPLOAD_EVENT_KEY,
-          JSON.stringify({
-            doc_id: latestUploadedDocId,
-            uploaded_at: Date.now(),
-          }),
-        );
-      }
       setToast(`${successCount} file${successCount > 1 ? "s" : ""} uploaded ✅`);
       window.setTimeout(() => setToast(""), 1800);
     }
@@ -174,13 +159,13 @@ export default function UploadPage() {
             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-white/70">
               TaxPilot • Upload Center
               <span className="h-1 w-1 rounded-full bg-white/40" />
-              Live Storage
+              API Connected
             </div>
             <h1 className="mt-4 text-4xl font-semibold tracking-tight">
               Upload your tax documents
             </h1>
             <p className="mt-3 text-white/70 max-w-2xl">
-              Add PDFs or images. Each upload is extracted into JSON and can be indexed for retrieval in chat/report.
+              Add PDFs or images. TaxPilot will extract key fields and generate a filing-readiness report.
             </p>
 
             <div className="mt-5 flex flex-wrap gap-2">
@@ -212,7 +197,7 @@ export default function UploadPage() {
       <section className="grid gap-4 md:grid-cols-3">
         <Section
           title="Dropzone"
-          subtitle="Drag and drop files here. Files are stored server-side."
+          subtitle="Drag and drop files here — stored on the server."
           right={
             <div className="flex gap-2">
               <button
@@ -338,7 +323,7 @@ export default function UploadPage() {
       {/* Recent uploads */}
       <Section
         title="Recent uploads"
-        subtitle="Backed by `/v1/uploads` plus extraction status."
+        subtitle="Stored on the backend. Synced across sessions."
         right={
           <div className="flex items-center gap-2">
             <Pill>{docs.length} total</Pill>
@@ -362,8 +347,6 @@ export default function UploadPage() {
                     <Pill>{d.status}</Pill>
                     <Pill>{formatBytes(d.size)}</Pill>
                     <Pill>{d.type.includes("pdf") ? "PDF" : "Image"}</Pill>
-                    <Pill>Extract: {d.extraction_status ?? "pending"}</Pill>
-                    <Pill>RAG: {d.rag_status ?? "pending"}</Pill>
                   </div>
                   <div className="mt-1 text-xs text-white/60">
                     Added {new Date(d.uploaded_at).toLocaleString()}
