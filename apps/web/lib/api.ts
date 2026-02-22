@@ -17,6 +17,18 @@ export async function uploadTaxDoc(file: File) {
   return handle(res);
 }
 
+export async function listDocs(): Promise<unknown[]> {
+  const res = await fetch(`${API}/v1/uploads`);
+  return handle(res);
+}
+
+export async function deleteDoc(docId: string) {
+  const res = await fetch(`${API}/v1/upload/${docId}`, {
+    method: "DELETE",
+  });
+  return handle(res);
+}
+
 export async function generateReport(payload: unknown) {
   const res = await fetch(`${API}/v1/report`, {
     method: "POST",
