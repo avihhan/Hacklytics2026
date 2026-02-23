@@ -1,6 +1,11 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import {
+  getReportRecommendations,
+  type ReportRecommendation,
+} from "@/lib/api";
 
 function Pill({ children }: { children: React.ReactNode }) {
   return (
@@ -47,10 +52,16 @@ function FlagCard({
 }) {
   const impactColor =
     impact === "High"
-      ? "bg-emerald-400 text-slate-950"
+      ? "border-emerald-300/60 bg-emerald-300/20 text-emerald-100"
       : impact === "Medium"
-      ? "bg-amber-300 text-slate-950"
-      : "bg-white/10 text-white";
+      ? "border-amber-300/60 bg-amber-300/20 text-amber-100"
+      : "border-white/20 bg-white/5 text-white/85";
+  const confidenceColor =
+    confidence === "High"
+      ? "border-cyan-300/50 bg-cyan-300/10 text-cyan-100"
+      : confidence === "Med"
+      ? "border-sky-300/40 bg-sky-300/10 text-sky-100"
+      : "border-white/20 bg-white/5 text-white/85";
 
   return (
     <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
@@ -60,11 +71,19 @@ function FlagCard({
           <div className="mt-2 text-sm text-white/70">{explanation}</div>
         </div>
 
-        <div className="flex flex-col items-end gap-2">
-          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${impactColor}`}>
-            Impact: {impact}
-          </span>
-          <Pill>Confidence: {confidence}</Pill>
+        <div className="flex w-32 flex-col gap-2">
+          <div className={`rounded-xl border px-3 py-2 ${impactColor}`}>
+            <div className="text-[10px] font-medium uppercase tracking-[0.08em] opacity-75">
+              Impact
+            </div>
+            <div className="mt-0.5 text-sm font-semibold leading-none">{impact}</div>
+          </div>
+          <div className={`rounded-xl border px-3 py-2 ${confidenceColor}`}>
+            <div className="text-[10px] font-medium uppercase tracking-[0.08em] opacity-75">
+              Confidence
+            </div>
+            <div className="mt-0.5 text-sm font-semibold leading-none">{confidence}</div>
+          </div>
         </div>
       </div>
 
@@ -81,40 +100,49 @@ function FlagCard({
 }
 
 export default function ReportPage() {
+  const [recommendations, setRecommendations] = useState<ReportRecommendation[]>(
+    [],
+  );
+  const [summary, setSummary] = useState("");
+  const [docCount, setDocCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadRecommendations() {
+      try {
+        setIsLoading(true);
+        setError(null);
+        const data = await getReportRecommendations();
+        if (!mounted) return;
+        setRecommendations(data.recommendations ?? []);
+        setSummary(data.summary ?? "");
+        setDocCount(data.doc_count ?? 0);
+      } catch (err) {
+        if (!mounted) return;
+        setError(err instanceof Error ? err.message : "Failed to load report data.");
+      } finally {
+        if (mounted) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadRecommendations();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const snapshot = {
     filingStatus: "Single",
     income: 74250,
     state: "GA",
-    docCount: 3,
-    extractionStatus: "Complete",
+    docCount,
+    extractionStatus: docCount > 0 ? "Analyzed" : "Pending",
   };
-
-  const flags = [
-    {
-      title: "Education Credit (AOTC/LLC)",
-      impact: "High" as const,
-      confidence: "Med" as const,
-      explanation:
-        "Based on tuition-related documents detected, you may qualify for an education credit depending on eligibility criteria.",
-      requiredDocs: ["1098-T", "Qualified expense receipts"],
-    },
-    {
-      title: "Student Loan Interest Deduction",
-      impact: "Medium" as const,
-      confidence: "High" as const,
-      explanation:
-        "1098-E detected. Eligible interest payments may reduce taxable income.",
-      requiredDocs: ["1098-E", "MAGI threshold confirmation"],
-    },
-    {
-      title: "Itemized Deduction Review",
-      impact: "Low" as const,
-      confidence: "Low" as const,
-      explanation:
-        "If charitable contributions or mortgage interest exceed the standard deduction, itemizing could benefit you.",
-      requiredDocs: ["Charity receipts", "Mortgage interest (1098)"],
-    },
-  ];
 
   return (
     <div className="space-y-8">
@@ -190,13 +218,34 @@ export default function ReportPage() {
       {/* Opportunity Flags */}
       <Section
         title="Opportunity Flags"
-        subtitle="Potential deductions or credits to review (not tax advice)."
+        subtitle="Gemini-analyzed opportunities based on extracted tax documents."
       >
-        <div className="grid gap-4 md:grid-cols-2">
-          {flags.map((flag) => (
-            <FlagCard key={flag.title} {...flag} />
-          ))}
-        </div>
+        {isLoading ? (
+          <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-white/70">
+            Analyzing extracted documents with Gemini...
+          </div>
+        ) : error ? (
+          <div className="rounded-2xl border border-red-400/30 bg-red-500/10 p-4 text-sm text-red-100">
+            Could not load recommendations: {error}
+          </div>
+        ) : recommendations.length === 0 ? (
+          <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-white/70">
+            No recommendations yet. Upload documents, then run extraction to generate a report.
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2">
+            {recommendations.map((flag) => (
+              <FlagCard
+                key={flag.title}
+                title={flag.title}
+                impact={flag.impact}
+                confidence={flag.confidence}
+                explanation={flag.explanation}
+                requiredDocs={flag.required_docs}
+              />
+            ))}
+          </div>
+        )}
       </Section>
 
       {/* Grounding */}
@@ -205,6 +254,9 @@ export default function ReportPage() {
         subtitle="How TaxPilot generated this report."
       >
         <div className="space-y-3 text-sm text-white/70">
+          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+            {summary || "No recommendation summary available yet."}
+          </div>
           <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
             Extracted structured fields from uploaded tax documents.
           </div>

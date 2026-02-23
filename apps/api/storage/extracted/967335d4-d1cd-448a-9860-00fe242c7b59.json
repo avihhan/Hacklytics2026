@@ -1,0 +1,63 @@
+{
+  "taxpayer_profile": {
+    "first_name": "Willie",
+    "last_name": "Wonka",
+    "ssn": "000000001",
+    "spouse_first_name": "Veruca",
+    "spouse_last_name": "Salt-Wonka",
+    "spouse_ssn": "999999999",
+    "home_address": "1 Chocolate Factory Way",
+    "city": "London",
+    "state_of_residence": "UK",
+    "zip_code": "W1A 1AA",
+    "foreign_country_name": "United Kingdom",
+    "foreign_province_state_county": "London",
+    "foreign_postal_code": "W1A 1AA",
+    "presidential_election_campaign_you": true,
+    "filing_status_single": true,
+    "digital_assets_no": true,
+    "age_blindness_you_born_before_jan_2_1960": true,
+    "dependents": [
+      {
+        "first_name": "Charlie",
+        "social_security_number": "555443333",
+        "relationship_to_you": "Heir",
+        "child_tax_credit": true
+      }
+    ],
+    "occupation": "Wonkvisionary",
+    "spouse_occupation": "Golden Goose Inspector",
+    "third_party_designee_yes": true,
+    "designee_name": "Willie Wonka",
+    "designee_phone_no": "555-Wonka",
+    "designee_email_address": "willie@wonka.com"
+  },
+  "tax_records": [
+    {
+      "tax_year": 2024,
+      "documents": {
+        "Form 1040": {
+          "tax_year_beginning": "01/01",
+          "tax_year_ending": "12/31",
+          "omb_no": "1545-0074",
+          "1a Total amount from Form(s) W-2, box 1": "1600000",
+          "3a Qualified dividends": "123700",
+          "7 Capital gain or (loss). Attach Schedule D if required. If not required, check here": true,
+          "7 Capital gain or (loss) value": "1380000",
+          "9 Add lines 1z, 2b, 3b, 4b, 5b, 6b, 7, and 8. This is your total income": "3103700",
+          "11 Subtract line 10 from line 9. This is your adjusted gross income": "3103700",
+          "12 Standard deduction or itemized deductions (from Schedule A)": "27000",
+          "15 Subtract line 14 from line 11. If zero or less, enter -0-. This is your taxable income": "3076700",
+          "16 Tax (see instructions)": "769175",
+          "19 Child tax credit or credit for other dependents from Schedule 8812": "2000",
+          "24 Add lines 22 and 23. This is your total tax": "767175",
+          "25d Add lines 25a through 25c": "1300000",
+          "33 Add lines 25d, 26, and 32. These are your total payments": "1200000",
+          "34 If line 33 is more than line 24, subtract line 24 from line 33. This is the amount you overpaid": "98000",
+          "35a Amount of line 34 you want refunded to you": "98000",
+          "35c Type": "Checking"
+        }
+      }
+    }
+  ]
+}
