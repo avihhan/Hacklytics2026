@@ -457,10 +457,28 @@ Input:
     if not isinstance(recommendations, list):
         recommendations = []
 
+    normalized = []
+    for rec in recommendations[:6]:
+        if not isinstance(rec, dict):
+            continue
+        impact = rec.get("impact")
+        confidence = rec.get("confidence")
+        required_docs = rec.get("required_docs")
+        normalized.append(
+            {
+                "title": str(rec.get("title") or "Untitled recommendation"),
+                "impact": impact if impact in {"High", "Medium", "Low"} else "Low",
+                "confidence": confidence if confidence in {"High", "Med", "Low"} else "Low",
+                "explanation": str(rec.get("explanation") or ""),
+                "required_docs": [str(x) for x in required_docs] if isinstance(required_docs, list) else [],
+                "source_docs": [str(x) for x in rec.get("source_docs", [])] if isinstance(rec.get("source_docs"), list) else [],
+            }
+        )
+
     return jsonify(
         {
             "summary": parsed.get("summary") if isinstance(parsed, dict) else "",
-            "recommendations": recommendations,
+            "recommendations": normalized,
             "doc_count": len(extracted_docs),
             "analyzed_doc_ids": [d["doc_id"] for d in extracted_docs],
         }

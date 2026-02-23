@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { uploadTaxDoc, listDocs, deleteDoc, clearRagVectors } from "@/lib/api";
 
 type UploadedDoc = {
@@ -11,6 +12,8 @@ type UploadedDoc = {
   size: number;
   type: string;
   uploaded_at: number;
+  extraction_status?: string;
+  rag_status?: string;
   status: "Ready" | "Uploading" | "Failed";
 };
 
@@ -58,35 +61,69 @@ function formatBytes(bytes: number) {
 }
 
 export default function UploadPage() {
+  const router = useRouter();
   const LS_CHAT = "taxpilot_chat_v1";
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const redirectTimerRef = useRef<number | null>(null);
 
   const [docs, setDocs] = useState<UploadedDoc[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [toast, setToast] = useState<string>("");
   const [uploading, setUploading] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [autoAdvance, setAutoAdvance] = useState(true);
   const [clearingRag, setClearingRag] = useState(false);
+
+  function normalizeDoc(d: Partial<UploadedDoc>): UploadedDoc {
+    const extraction = (d.extraction_status || "").toLowerCase();
+    const status: UploadedDoc["status"] = extraction.startsWith("failed")
+      ? "Failed"
+      : extraction === "completed" || extraction === "skipped" || !extraction
+        ? "Ready"
+        : "Uploading";
+
+    return {
+      doc_id: d.doc_id || "",
+      original_name: d.original_name || "Untitled document",
+      stored_name: d.stored_name || "",
+      size: d.size || 0,
+      type: d.type || "application/octet-stream",
+      uploaded_at: d.uploaded_at || Date.now(),
+      extraction_status: d.extraction_status,
+      rag_status: d.rag_status,
+      status,
+    };
+  }
+
+  function isProcessed(d: Partial<UploadedDoc>) {
+    const extraction = (d.extraction_status || "").toLowerCase();
+    return extraction === "completed" || extraction === "skipped" || !extraction;
+  }
 
   // Load docs from API on mount
   useEffect(() => {
     listDocs()
       .then((data) => {
-        const mapped = (data as UploadedDoc[]).map((d) => ({
-          ...d,
-          status: "Ready" as const,
-        }));
+        const mapped = (data as UploadedDoc[]).map((d) => normalizeDoc(d));
         setDocs(mapped);
       })
       .catch(() => {
         /* API offline — start empty */
       });
+
+    return () => {
+      if (redirectTimerRef.current) {
+        window.clearTimeout(redirectTimerRef.current);
+      }
+    };
   }, []);
 
   const stats = useMemo(() => {
     const total = docs.length;
     const ready = docs.filter((d) => d.status === "Ready").length;
     const newest = docs[0]?.uploaded_at;
-    return { total, ready, newest };
+    const failed = docs.filter((d) => d.status === "Failed").length;
+    return { total, ready, failed, newest };
   }, [docs]);
 
   async function addFiles(files: FileList | File[]) {
@@ -94,16 +131,20 @@ export default function UploadPage() {
     if (arr.length === 0) return;
 
     setUploading(true);
+    setPendingCount(arr.length);
     let successCount = 0;
+    let processedCount = 0;
 
     for (const file of arr) {
       try {
-        const result = (await uploadTaxDoc(file)) as UploadedDoc;
-        result.status = "Ready";
+        const result = normalizeDoc((await uploadTaxDoc(file)) as UploadedDoc);
         setDocs((prev) => [result, ...prev]);
         successCount++;
+        if (isProcessed(result)) processedCount++;
       } catch (err) {
         console.error("Upload failed:", err);
+      } finally {
+        setPendingCount((prev) => Math.max(0, prev - 1));
       }
     }
 
@@ -111,8 +152,15 @@ export default function UploadPage() {
 
     if (successCount > 0) {
       localStorage.removeItem(LS_CHAT);
-      setToast(`${successCount} file${successCount > 1 ? "s" : ""} uploaded ✅`);
-      window.setTimeout(() => setToast(""), 1800);
+      if (autoAdvance && processedCount === successCount) {
+        setToast("Upload complete. Opening report…");
+        redirectTimerRef.current = window.setTimeout(() => {
+          router.push("/report");
+        }, 900);
+      } else {
+        setToast(`${successCount} file${successCount > 1 ? "s" : ""} uploaded ✅`);
+        window.setTimeout(() => setToast(""), 1800);
+      }
     }
   }
 
@@ -160,10 +208,7 @@ export default function UploadPage() {
       // refresh list so rag_status reflects backend update
       try {
         const data = await listDocs();
-        const mapped = (data as UploadedDoc[]).map((d) => ({
-          ...d,
-          status: "Ready" as const,
-        }));
+        const mapped = (data as UploadedDoc[]).map((d) => normalizeDoc(d));
         setDocs(mapped);
       } catch {
         /* ignore */
@@ -283,7 +328,7 @@ export default function UploadPage() {
 
             <div className="mt-4 text-sm font-semibold">
               {uploading
-                ? "Uploading…"
+                ? `Uploading and processing ${pendingCount} file${pendingCount === 1 ? "" : "s"}…`
                 : dragOver
                   ? "Drop to add files"
                   : "Drag & drop your documents"}
@@ -296,6 +341,19 @@ export default function UploadPage() {
               {examples.map((x) => (
                 <Pill key={x}>{x}</Pill>
               ))}
+            </div>
+
+            <div className="mt-4 flex items-center justify-center gap-2 text-xs text-white/75">
+              <input
+                id="auto-advance"
+                type="checkbox"
+                checked={autoAdvance}
+                onChange={(e) => setAutoAdvance(e.target.checked)}
+                className="h-4 w-4 rounded border-white/20 bg-black/30 accent-emerald-400"
+              />
+              <label htmlFor="auto-advance" className="cursor-pointer">
+                Auto-continue to report when processing completes
+              </label>
             </div>
 
             {toast ? (
@@ -326,8 +384,8 @@ export default function UploadPage() {
 
             <div className="flex flex-wrap gap-2">
               <Pill>Ready: {stats.ready}</Pill>
-              <Pill>Uploading: {docs.filter((d) => d.status === "Uploading").length}</Pill>
-              <Pill>Failed: {docs.filter((d) => d.status === "Failed").length}</Pill>
+              <Pill>Processing: {uploading ? pendingCount : docs.filter((d) => d.status === "Uploading").length}</Pill>
+              <Pill>Failed: {stats.failed}</Pill>
             </div>
 
             <Link
@@ -384,6 +442,7 @@ export default function UploadPage() {
                     <Pill>{d.status}</Pill>
                     <Pill>{formatBytes(d.size)}</Pill>
                     <Pill>{d.type.includes("pdf") ? "PDF" : "Image"}</Pill>
+                    {d.extraction_status ? <Pill>Extraction: {d.extraction_status}</Pill> : null}
                   </div>
                   <div className="mt-1 text-xs text-white/60">
                     Added {new Date(d.uploaded_at).toLocaleString()}
