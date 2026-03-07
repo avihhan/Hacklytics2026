@@ -10,8 +10,6 @@ from werkzeug.utils import secure_filename
 from google import genai
 from google.genai import types, errors as genai_errors
 
-import actian_rag
-
 load_dotenv()
 
 app = Flask(__name__)
@@ -333,15 +331,6 @@ def extract_document(doc_id: str):
     out_path = EXTRACTED_DIR / f"{doc_id}.json"
     out_path.write_text(json.dumps(extracted, indent=2))
 
-    # Auto-upsert to Actian for RAG
-    rag_status = "skipped"
-    try:
-        actian_rag.embed_and_upsert(doc_id, extracted)
-        rag_status = "completed"
-    except Exception as e:
-        rag_status = f"failed: {str(e)[:100]}"
-
-    return jsonify({"doc_id": doc_id, "extracted": extracted, "rag_status": rag_status})
 
 
 @app.get("/v1/extracted/<doc_id>")
